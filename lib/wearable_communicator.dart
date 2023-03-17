@@ -81,7 +81,7 @@ class WearableListener {
     int currentListenerId = _nextCallbackId++;
     _messageCallbacksById[currentListenerId] = callback;
     await _channel.invokeMethod("listenMessages", currentListenerId);
-    await _channel.invokeMethod("cancelListeningMessages", currentListenerId);
+    // await _channel.invokeMethod("cancelListeningMessages", currentListenerId);
     _messageCallbacksById.remove(currentListenerId);
   }
 
