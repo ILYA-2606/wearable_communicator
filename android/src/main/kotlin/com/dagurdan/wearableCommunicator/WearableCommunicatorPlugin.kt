@@ -9,7 +9,6 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
-import io.flutter.plugin.common.PluginRegistry.Registrar
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import org.json.JSONObject
@@ -17,62 +16,49 @@ import kotlin.reflect.typeOf
 
 /** WearableCommunicatorPlugin */
 public class WearableCommunicatorPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, MessageClient.OnMessageReceivedListener, DataClient.OnDataChangedListener {
-  /// The MethodChannel that will the communication between Flutter and native Android
-  ///
-  /// This local reference serves to register the plugin with the Flutter Engine and unregister it
-  /// when the Flutter Engine is detached from the Activity
-  private lateinit var channel : MethodChannel
+    private var TAG = "WearableCommunicator";
+    private var methodChannel: MethodChannel? = null
 
-  private var activity: Activity? = null
+    private var activity: Activity? = null
     private val messageListenerIds = mutableListOf<Int>()
     private val dataListenerIds = mutableListOf<Int>()
 
-  override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-    channel = MethodChannel(flutterPluginBinding.flutterEngine.dartExecutor, "wearableCommunicator")
-    channel.setMethodCallHandler(this);
-  }
-
-  // This static function is optional and equivalent to onAttachedToEngine. It supports the old
-  // pre-Flutter-1.12 Android projects. You are encouraged to continue supporting
-  // plugin registration via this function while apps migrate to use the new Android APIs
-  // post-flutter-1.12 via https://flutter.dev/go/android-project-migration.
-  //
-  // It is encouraged to share logic between onAttachedToEngine and registerWith to keep
-  // them functionally equivalent. Only one of onAttachedToEngine or registerWith will be called
-  // depending on the user's project. onAttachedToEngine or registerWith must both be defined
-  // in the same class.
-  companion object {
-    @JvmStatic
-    fun registerWith(registrar: Registrar) {
-      val channel = MethodChannel(registrar.messenger(), "wearableCommunicator")
-      channel.setMethodCallHandler(WearableCommunicatorPlugin())
+    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        Log.d(TAG, "onAttachedToEngine!!!")
+        methodChannel = MethodChannel(binding?.binaryMessenger, "wearableCommunicator")
+        methodChannel?.setMethodCallHandler(this)
     }
-      const val TAG = "WearableCommunicator"
-  }
 
-  override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
-    when (call.method) {
-        "getPlatformVersion" -> {
-          result.success("Android ${android.os.Build.VERSION.RELEASE}")
-        }
-        "sendMessage" -> {
-            sendMessage(call, result)
-        }
-        "setData" -> {
-            setData(call, result)
-        }
-        "listenMessages" -> {
-            registerMessageListener(call)
-            result.success(null)
-        }
-        "listenData" -> {
-            registerDataLayerListener(call)
-        }
-        else -> {
-          result.notImplemented()
+    override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        Log.d(TAG, "onDetachedFromEngine!!!")
+        methodChannel?.setMethodCallHandler(null)
+        methodChannel = null
+    }
+
+    override fun onMethodCall(call: MethodCall, result: Result) {
+        Log.d(TAG, "Handler!!! ${call.method}")
+        when (call.method) {
+            "getPlatformVersion" -> {
+            result.success("Android ${android.os.Build.VERSION.RELEASE}")
+            }
+            "sendMessage" -> {
+                sendMessage(call, result)
+            }
+            "setData" -> {
+                setData(call, result)
+            }
+            "listenMessages" -> {
+                registerMessageListener(call)
+                result.success(null)
+            }
+            "listenData" -> {
+                registerDataLayerListener(call)
+            }
+            else -> {
+            result.notImplemented()
+            }
         }
     }
-  }
 
     private fun registerMessageListener(call: MethodCall) {
         try {
@@ -101,11 +87,11 @@ public class WearableCommunicatorPlugin: FlutterPlugin, MethodCallHandler, Activ
             result.success(null)
         } else {
             try {
-                val argument = call.arguments<HashMap<String, Any>>()
+                val argument = call.arguments<Map<String, Any>>()
                 val client = Wearable.getMessageClient(activity!!)
                 Wearable.getNodeClient(activity!!).connectedNodes.addOnSuccessListener { nodes ->
                     nodes.forEach { node ->
-                        val json = JSONObject(argument).toString()
+                        val json = JSONObject(argument as Map<Any?, Any?>).toString()
                         client.sendMessage(node.id, "/MessageChannel", json.toByteArray()).addOnSuccessListener {
                             Log.d(TAG,"sent message: $json to ${node.displayName}")
                         }
@@ -168,11 +154,8 @@ public class WearableCommunicatorPlugin: FlutterPlugin, MethodCallHandler, Activ
         }
     }
 
-      override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
-        channel.setMethodCallHandler(null)
-      }
-
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        Log.d(TAG, "onAttachedToActivity!!!")
         activity = binding.activity
         startWearableClients(activity!!)
     }
@@ -207,7 +190,7 @@ public class WearableCommunicatorPlugin: FlutterPlugin, MethodCallHandler, Activ
     override fun onMessageReceived(message: MessageEvent) {
         val data = String(message.data)
         messageListenerIds.forEach { id ->
-            channel.invokeMethod("messageReceived", hashMapOf(
+            methodChannel?.invokeMethod("messageReceived", hashMapOf(
                     "id" to id,
                     "args" to data
             ))
@@ -224,7 +207,7 @@ public class WearableCommunicatorPlugin: FlutterPlugin, MethodCallHandler, Activ
                     map[key] = datamap.get(key)
                 }
                 dataListenerIds.forEach { id ->
-                    channel.invokeMethod("dataReceived", hashMapOf(
+                    methodChannel?.invokeMethod("dataReceived", hashMapOf(
                         "id" to id,
                         "args" to map
                     ))
